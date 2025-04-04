@@ -19,10 +19,17 @@ func (c *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 }
 
 func (c *apiConfig) GetFileserverHits(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	w.Write([]byte(fmt.Sprintf("Hits: %d\n", c.fileserverHits.Load())))
+	w.Write([]byte(fmt.Sprintf(`
+<html>
+  <body>
+    <h1>Welcome, Chirpy Admin</h1>
+    <p>Chirpy has been visited %d times!</p>
+  </body>
+</html>
+`, c.fileserverHits.Load())))
 }
 
 func (c *apiConfig) Reset(w http.ResponseWriter, r *http.Request) {

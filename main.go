@@ -21,8 +21,8 @@ func main() {
 
 		w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("GET /api/metrics", apiConfig.GetFileserverHits)
-	mux.HandleFunc("POST /api/reset", apiConfig.Reset)
+	mux.HandleFunc("GET /admin/metrics", apiConfig.GetFileserverHits)
+	mux.HandleFunc("POST /admin/reset", apiConfig.Reset)
 
 	mux.Handle("/app/", apiConfig.MiddlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
 
