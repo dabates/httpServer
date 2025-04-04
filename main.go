@@ -14,15 +14,15 @@ func main() {
 
 	apiConfig := apiConfig{}
 
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 		w.WriteHeader(http.StatusOK)
 
 		w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("/metrics", apiConfig.GetFileserverHits)
-	mux.HandleFunc("/reset", apiConfig.Reset)
+	mux.HandleFunc("GET /metrics", apiConfig.GetFileserverHits)
+	mux.HandleFunc("POST /reset", apiConfig.Reset)
 
 	mux.Handle("/app/", apiConfig.MiddlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
 
