@@ -1,21 +1,41 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/dabates/httpServer/internal/database"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
+import _ "github.com/lib/pq"
 
 func main() {
+	apiConfig := apiConfig{}
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+	apiConfig.db = dbQueries
+
 	mux := http.NewServeMux()
 	httpServer := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
 	}
-
-	apiConfig := apiConfig{}
 
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

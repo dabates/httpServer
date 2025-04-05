@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/dabates/httpServer/internal/database"
 	"net/http"
 	"sync/atomic"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	db             *database.Queries
 }
 
 func (c *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
