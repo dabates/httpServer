@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 )
 
 func main() {
@@ -25,8 +26,8 @@ func main() {
 	})
 	mux.HandleFunc("POST /api/validate_chirp", func(w http.ResponseWriter, r *http.Request) {
 		type respBody struct {
-			Error string `json:"error,omitempty"`
-			Valid bool   `json:"valid"`
+			Error       string `json:"error,omitempty"`
+			CleanedBody string `json:"cleaned_body,omitempty"`
 		}
 
 		type reqBody struct {
@@ -38,7 +39,6 @@ func main() {
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			resp := respBody{
-				Valid: false,
 				Error: err.Error(),
 			}
 			json.NewEncoder(w).Encode(resp)
@@ -51,7 +51,6 @@ func main() {
 		if len(body.Body) > 140 {
 			w.WriteHeader(http.StatusBadRequest)
 			resp := respBody{
-				Valid: false,
 				Error: "Body is too long",
 			}
 
@@ -60,19 +59,22 @@ func main() {
 			return
 		}
 
+		line := body.Body
+		line = replaceBadWord(line, "kerfuffle")
+		line = replaceBadWord(line, "sharbert")
+		line = replaceBadWord(line, "fornax")
+
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("content-type", "application/json")
 
 		resp := respBody{
-			Valid: true,
-			Error: "",
+			CleanedBody: line,
 		}
 
 		data, err := json.Marshal(resp)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			resp := respBody{
-				Valid: false,
 				Error: err.Error(),
 			}
 			json.NewEncoder(w).Encode(resp)
@@ -89,4 +91,14 @@ func main() {
 	mux.Handle("/app/", apiConfig.MiddlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
 
 	log.Fatal(httpServer.ListenAndServe())
+}
+
+func replaceBadWord(line string, badWord string) string {
+	for _, word := range strings.Split(line, " ") {
+		if strings.ToLower(word) == strings.ToLower(badWord) {
+			line = strings.Replace(line, word, "****", -1)
+		}
+	}
+
+	return line
 }
