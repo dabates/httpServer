@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/dabates/httpServer/internal/database"
+	"log"
 	"net/http"
 	"sync/atomic"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	platform       string
 	db             *database.Queries
 }
 
@@ -35,10 +38,20 @@ func (c *apiConfig) GetFileserverHits(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *apiConfig) Reset(w http.ResponseWriter, r *http.Request) {
+	if c.platform != "dev" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
 	c.fileserverHits.Store(0)
+
+	err := c.db.DeleteUsers(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	w.Write([]byte("OK"))
 }
