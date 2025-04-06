@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dabates/httpServer/internal/database"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"log"
 	"net/http"
@@ -48,10 +49,17 @@ func main() {
 
 		w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("POST /api/validate_chirp", validateChirp)
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("In post for users")
 		users(w, r, &apiConfig)
+	})
+	mux.HandleFunc("POST /api/chirps", func(w http.ResponseWriter, r *http.Request) {
+		chirps(w, r, &apiConfig)
+	})
+	mux.HandleFunc("GET /api/chirps/{id}", func(w http.ResponseWriter, r *http.Request) {
+		getChirps(w, r, &apiConfig)
+	})
+	mux.HandleFunc("GET /api/chirps", func(w http.ResponseWriter, r *http.Request) {
+		getChirps(w, r, &apiConfig)
 	})
 
 	mux.HandleFunc("GET /admin/metrics", apiConfig.GetFileserverHits)
@@ -72,62 +80,131 @@ func replaceBadWord(line string, badWord string) string {
 	return line
 }
 
-func validateChirp(w http.ResponseWriter, r *http.Request) {
+func getChirps(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 	type respBody struct {
-		Error       string `json:"error,omitempty"`
-		CleanedBody string `json:"cleaned_body,omitempty"`
+		Id        string `json:"id"`
+		Body      string `json:"body"`
+		UserId    string `json:"user_id"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
 	}
 
-	type reqBody struct {
-		Body string `json:"Body"`
-	}
+	id := r.PathValue("id")
+	fmt.Println("ID:", id)
 
-	body := reqBody{}
-	err := json.NewDecoder(r.Body).Decode(&body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		resp := respBody{
-			Error: err.Error(),
-		}
-		json.NewEncoder(w).Encode(resp)
-
-		return
-	}
-	fmt.Println("got:")
-	fmt.Println(body.Body)
-
-	if len(body.Body) > 140 {
-		w.WriteHeader(http.StatusBadRequest)
-		resp := respBody{
-			Error: "Body is too long",
+	if id != "" {
+		id, err := uuid.Parse(id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
 		}
 
-		data, _ := json.Marshal(resp)
+		chirp, err := config.db.GetChirp(r.Context(), id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		resp := respBody{
+			Id:        chirp.ID.String(),
+			Body:      chirp.Body,
+			UserId:    chirp.UserID.String(),
+			CreatedAt: chirp.CreatedAt.String(),
+			UpdatedAt: chirp.UpdatedAt.String(),
+		}
+		data, err := json.Marshal(resp)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
 		w.Write(data)
 		return
 	}
 
-	line := body.Body
+	chirps, err := config.db.GetChirps(r.Context())
+	if err != nil {
+		log.Fatal(err)
+	}
+	resp := make([]respBody, len(chirps))
+	for i, chirp := range chirps {
+		resp[i] = respBody{
+			Id:        chirp.ID.String(),
+			Body:      chirp.Body,
+			UserId:    chirp.UserID.String(),
+			CreatedAt: chirp.CreatedAt.String(),
+			UpdatedAt: chirp.UpdatedAt.String(),
+		}
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	w.Header().Set("content-type", "application/json")
+	w.Write(data)
+
+}
+
+func chirps(w http.ResponseWriter, r *http.Request, config *apiConfig) {
+	type reqBody struct {
+		Body   string `json:"body"`
+		UserId string `json:"user_id"`
+	}
+
+	type respBody struct {
+		Id        string `json:"id"`
+		Body      string `json:"body"`
+		UserId    string `json:"user_id"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+	}
+
+	bodyData := reqBody{}
+	err := json.NewDecoder(r.Body).Decode(&bodyData)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Fatal(err)
+	}
+
+	if len(bodyData.Body) > 140 {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Fatal("Body is too long")
+	}
+
+	line := bodyData.Body
 	line = replaceBadWord(line, "kerfuffle")
 	line = replaceBadWord(line, "sharbert")
 	line = replaceBadWord(line, "fornax")
 
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("content-type", "application/json")
-
-	resp := respBody{
-		CleanedBody: line,
+	userID, err := uuid.Parse(bodyData.UserId)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Fatal(err)
 	}
 
+	chirp, err := config.db.CreateChirp(r.Context(), database.CreateChirpParams{
+		Body:   line,
+		UserID: userID,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Fatal(err)
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("content-type", "application/json")
+	resp := respBody{
+		Id:        chirp.ID.String(),
+		Body:      chirp.Body,
+		UserId:    chirp.UserID.String(),
+		CreatedAt: chirp.CreatedAt.String(),
+		UpdatedAt: chirp.UpdatedAt.String(),
+	}
 	data, err := json.Marshal(resp)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		resp := respBody{
-			Error: err.Error(),
-		}
-		json.NewEncoder(w).Encode(resp)
-
-		return
+		log.Fatal(err)
 	}
 
 	w.Write(data)
