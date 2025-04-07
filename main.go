@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 import _ "github.com/lib/pq"
 
@@ -26,6 +27,9 @@ func main() {
 	platform := os.Getenv("PLATFORM")
 	fmt.Println("\n\nplatform:", platform)
 	apiConfig.platform = platform
+
+	secret := os.Getenv("SECRET")
+	apiConfig.secret = secret
 
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
@@ -164,8 +168,21 @@ func chirps(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 		UpdatedAt string `json:"updated_at"`
 	}
 
+	//Validate the jwt
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		log.Fatal(err)
+	}
+
+	userID, err := auth.ValidateJWT(token, config.secret)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		log.Fatal(err)
+	}
+
 	bodyData := reqBody{}
-	err := json.NewDecoder(r.Body).Decode(&bodyData)
+	err = json.NewDecoder(r.Body).Decode(&bodyData)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Fatal(err)
@@ -180,12 +197,6 @@ func chirps(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 	line = replaceBadWord(line, "kerfuffle")
 	line = replaceBadWord(line, "sharbert")
 	line = replaceBadWord(line, "fornax")
-
-	userID, err := uuid.Parse(bodyData.UserId)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		log.Fatal(err)
-	}
 
 	chirp, err := config.db.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   line,
@@ -270,8 +281,9 @@ func users(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 
 func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 	type reqBody struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		ExpiresIn int    `json:"expires_in"`
 	}
 
 	type respBody struct {
@@ -279,12 +291,17 @@ func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 		CreatedAt string `json:"created_at"`
 		UpdatedAt string `json:"updated_at"`
 		Email     string `json:"email"`
+		Token     string `json:"token"`
 	}
 
 	bodyData := reqBody{}
 	err := json.NewDecoder(r.Body).Decode(&bodyData)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if bodyData.ExpiresIn == 0 || bodyData.ExpiresIn > 3600 {
+		bodyData.ExpiresIn = 3600
 	}
 
 	user, err := a.db.GetUserByEmail(r.Context(), bodyData.Email)
@@ -301,12 +318,21 @@ func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 		return
 	}
 
+	//Get token for auth
+	token, err := auth.MakeJWT(user.ID, a.secret, time.Duration(bodyData.ExpiresIn)*time.Second)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	resp := respBody{
 		Id:        user.ID.String(),
 		CreatedAt: user.CreatedAt.String(),
 		UpdatedAt: user.UpdatedAt.String(),
 		Email:     user.Email,
+		Token:     token,
 	}
 	data, err := json.Marshal(resp)
 	if err != nil {
