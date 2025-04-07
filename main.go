@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/dabates/httpServer/internal/auth"
 	"github.com/dabates/httpServer/internal/database"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -60,6 +61,9 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/chirps", func(w http.ResponseWriter, r *http.Request) {
 		getChirps(w, r, &apiConfig)
+	})
+	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
+		login(w, r, &apiConfig)
 	})
 
 	mux.HandleFunc("GET /admin/metrics", apiConfig.GetFileserverHits)
@@ -219,7 +223,8 @@ func users(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 	}
 
 	type reqBody struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	bodyData := reqBody{}
@@ -232,7 +237,16 @@ func users(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 		log.Fatal("Email is empty")
 	}
 
-	user, err := config.db.CreateUser(r.Context(), bodyData.Email)
+	password, err := auth.HashPassword(bodyData.Password)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	user, err := config.db.CreateUser(r.Context(), database.CreateUserParams{
+		Email:          bodyData.Email,
+		HashedPassword: password,
+	})
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -250,6 +264,55 @@ func users(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("content-type", "application/json")
+	w.Write(data)
+}
+
+func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
+	type reqBody struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	type respBody struct {
+		Id        string `json:"id"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+		Email     string `json:"email"`
+	}
+
+	bodyData := reqBody{}
+	err := json.NewDecoder(r.Body).Decode(&bodyData)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	user, err := a.db.GetUserByEmail(r.Context(), bodyData.Email)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	ok := auth.CheckPasswordHash(bodyData.Password, user.HashedPassword)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("Invalid password"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	resp := respBody{
+		Id:        user.ID.String(),
+		CreatedAt: user.CreatedAt.String(),
+		UpdatedAt: user.UpdatedAt.String(),
+		Email:     user.Email,
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	w.Header().Set("content-type", "application/json")
 	w.Write(data)
 }
