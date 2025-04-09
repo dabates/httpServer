@@ -55,6 +55,9 @@ func main() {
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, r *http.Request) {
 		api.CreateUser(w, r, &apiConfig)
 	})
+	mux.HandleFunc("PUT /api/users", func(w http.ResponseWriter, r *http.Request) {
+		api.UpdateUser(w, r, &apiConfig)
+	})
 
 	mux.HandleFunc("POST /api/chirps", func(w http.ResponseWriter, r *http.Request) {
 		api.Chirps(w, r, &apiConfig)
