@@ -1,7 +1,11 @@
 package auth
 
 import (
+	"context"
+	"crypto/rand"
+	"database/sql"
 	"fmt"
+	"github.com/dabates/httpServer/internal/database"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -65,4 +69,40 @@ func GetBearerToken(headers http.Header) (string, error) {
 	auth = strings.TrimSpace(strings.Replace(auth, "Bearer ", "", 1))
 
 	return auth, nil
+}
+
+func MakeRefreshToken(userId uuid.UUID, db *database.Queries) (string, error) {
+	key := make([]byte, 32)
+	rand.Read(key)
+
+	hexKey := fmt.Sprintf("%x", key)
+	now := time.Now()
+
+	_, err := db.CreateRefreshToken(context.Background(), database.CreateRefreshTokenParams{
+		ExpiresAt: sql.NullTime{
+			Time:  now.AddDate(0, 0, 60),
+			Valid: true,
+		},
+		Token:  hexKey,
+		UserID: userId,
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return hexKey, nil
+}
+
+func ValidateRefreshToken(token string, db *database.Queries) (bool, error) {
+	tokenRec, err := db.GetUserFromRefreshToken(context.Background(), token)
+	if err != nil {
+		return false, err
+	}
+
+	if tokenRec.RevokedAt.Valid || tokenRec.ExpiresAt.Time.Before(time.Now()) {
+		return false, nil
+	}
+
+	return true, nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -68,6 +69,12 @@ func main() {
 	})
 	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
 		login(w, r, &apiConfig)
+	})
+	mux.HandleFunc("POST /api/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refresh(w, r, &apiConfig)
+	})
+	mux.HandleFunc("POST /api/revoke", func(w http.ResponseWriter, r *http.Request) {
+		revoke(w, r, &apiConfig)
 	})
 
 	mux.HandleFunc("GET /admin/metrics", apiConfig.GetFileserverHits)
@@ -172,13 +179,15 @@ func chirps(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		log.Fatal(err)
+		w.Write([]byte(err.Error()))
+		return
 	}
 
 	userID, err := auth.ValidateJWT(token, config.secret)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		log.Fatal(err)
+		w.Write([]byte(err.Error()))
+		return
 	}
 
 	bodyData := reqBody{}
@@ -281,27 +290,23 @@ func users(w http.ResponseWriter, r *http.Request, config *apiConfig) {
 
 func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 	type reqBody struct {
-		Email     string `json:"email"`
-		Password  string `json:"password"`
-		ExpiresIn int    `json:"expires_in"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	type respBody struct {
-		Id        string `json:"id"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
-		Email     string `json:"email"`
-		Token     string `json:"token"`
+		Id           string `json:"id"`
+		CreatedAt    string `json:"created_at"`
+		UpdatedAt    string `json:"updated_at"`
+		Email        string `json:"email"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	bodyData := reqBody{}
 	err := json.NewDecoder(r.Body).Decode(&bodyData)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	if bodyData.ExpiresIn == 0 || bodyData.ExpiresIn > 3600 {
-		bodyData.ExpiresIn = 3600
 	}
 
 	user, err := a.db.GetUserByEmail(r.Context(), bodyData.Email)
@@ -319,7 +324,14 @@ func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 	}
 
 	//Get token for auth
-	token, err := auth.MakeJWT(user.ID, a.secret, time.Duration(bodyData.ExpiresIn)*time.Second)
+	token, err := auth.MakeJWT(user.ID, a.secret, time.Duration(3600)*time.Second)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	// and the refresh token
+	refreshToken, err := auth.MakeRefreshToken(user.ID, a.db)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -328,11 +340,12 @@ func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 
 	w.WriteHeader(http.StatusOK)
 	resp := respBody{
-		Id:        user.ID.String(),
-		CreatedAt: user.CreatedAt.String(),
-		UpdatedAt: user.UpdatedAt.String(),
-		Email:     user.Email,
-		Token:     token,
+		Id:           user.ID.String(),
+		CreatedAt:    user.CreatedAt.String(),
+		UpdatedAt:    user.UpdatedAt.String(),
+		Email:        user.Email,
+		Token:        token,
+		RefreshToken: refreshToken,
 	}
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -341,4 +354,71 @@ func login(w http.ResponseWriter, r *http.Request, a *apiConfig) {
 
 	w.Header().Set("content-type", "application/json")
 	w.Write(data)
+}
+
+func refresh(w http.ResponseWriter, r *http.Request, a *apiConfig) {
+	type respBody struct {
+		Token string `json:"token"`
+	}
+
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	ok, _ := auth.ValidateRefreshToken(refreshToken, a.db)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("Invalid refresh token"))
+		return
+	}
+
+	user, err := a.db.GetUserFromRefreshToken(context.Background(), refreshToken)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	//Get token for auth
+	token, err := auth.MakeJWT(user.UserID, a.secret, time.Duration(3600)*time.Second)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	resp := respBody{
+		Token: token,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	w.Header().Set("content-type", "application/json")
+	w.Write(data)
+}
+
+func revoke(w http.ResponseWriter, r *http.Request, a *apiConfig) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	err = a.db.ExpireRefreshToken(context.Background(), refreshToken)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
