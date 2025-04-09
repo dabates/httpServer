@@ -1,4 +1,4 @@
-package main
+package types
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 	"sync/atomic"
 )
 
-type apiConfig struct {
+type ApiConfig struct {
 	fileserverHits atomic.Int32
-	platform       string
-	db             *database.Queries
-	secret         string
+	Platform       string
+	Db             *database.Queries
+	Secret         string
 }
 
-func (c *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
+func (c *ApiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c.fileserverHits.Add(1)
 
@@ -24,7 +24,7 @@ func (c *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 	})
 }
 
-func (c *apiConfig) GetFileserverHits(w http.ResponseWriter, r *http.Request) {
+func (c *ApiConfig) GetFileserverHits(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -38,8 +38,8 @@ func (c *apiConfig) GetFileserverHits(w http.ResponseWriter, r *http.Request) {
 `, c.fileserverHits.Load())))
 }
 
-func (c *apiConfig) Reset(w http.ResponseWriter, r *http.Request) {
-	if c.platform != "dev" {
+func (c *ApiConfig) Reset(w http.ResponseWriter, r *http.Request) {
+	if c.Platform != "dev" {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -49,7 +49,7 @@ func (c *apiConfig) Reset(w http.ResponseWriter, r *http.Request) {
 
 	c.fileserverHits.Store(0)
 
-	err := c.db.DeleteUsers(context.Background())
+	err := c.Db.DeleteUsers(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
