@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/dabates/httpServer/internal/auth"
@@ -12,15 +13,15 @@ import (
 	"strings"
 )
 
-func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
-	type respBody struct {
-		Id        string `json:"id"`
-		Body      string `json:"body"`
-		UserId    string `json:"user_id"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
-	}
+type chirpsBody struct {
+	Id        string `json:"id"`
+	Body      string `json:"body"`
+	UserId    string `json:"user_id"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
 
+func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
 	id := r.PathValue("id")
 	fmt.Println("ID:", id)
 
@@ -34,12 +35,12 @@ func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) 
 
 		chirp, err := config.Db.GetChirp(r.Context(), id)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(err.Error()))
 			return
 		}
 
-		resp := respBody{
+		resp := chirpsBody{
 			Id:        chirp.ID.String(),
 			Body:      chirp.Body,
 			UserId:    chirp.UserID.String(),
@@ -59,9 +60,9 @@ func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) 
 	if err != nil {
 		log.Fatal(err)
 	}
-	resp := make([]respBody, len(chirps))
+	resp := make([]chirpsBody, len(chirps))
 	for i, chirp := range chirps {
-		resp[i] = respBody{
+		resp[i] = chirpsBody{
 			Id:        chirp.ID.String(),
 			Body:      chirp.Body,
 			UserId:    chirp.UserID.String(),
@@ -82,14 +83,6 @@ func Chirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
 	type reqBody struct {
 		Body   string `json:"body"`
 		UserId string `json:"user_id"`
-	}
-
-	type respBody struct {
-		Id        string `json:"id"`
-		Body      string `json:"body"`
-		UserId    string `json:"user_id"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
 	}
 
 	//Validate the jwt
@@ -135,7 +128,7 @@ func Chirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("content-type", "application/json")
-	resp := respBody{
+	resp := chirpsBody{
 		Id:        chirp.ID.String(),
 		Body:      chirp.Body,
 		UserId:    chirp.UserID.String(),
@@ -149,6 +142,55 @@ func Chirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
 	}
 
 	w.Write(data)
+}
+
+func DeleteChirp(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, config.Secret)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("No id provided"))
+		return
+	}
+
+	// verify the chirp is by this user
+	chirp, err := config.Db.GetChirp(r.Context(), uuid.MustParse(id))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	if chirp.UserID != userID {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("Not allowed to delete this chirp"))
+
+		return
+	}
+
+	err = config.Db.DeleteChirp(context.Background(), database.DeleteChirpParams{
+		ID:     chirp.ID,
+		UserID: userID,
+	})
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func replaceBadWord(line string, badWord string) string {

@@ -68,6 +68,9 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", func(w http.ResponseWriter, r *http.Request) {
 		api.GetChirps(w, r, &apiConfig)
 	})
+	mux.HandleFunc("DELETE /api/chirps/{id}", func(w http.ResponseWriter, r *http.Request) {
+		api.DeleteChirp(w, r, &apiConfig)
+	})
 
 	// auth
 	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
