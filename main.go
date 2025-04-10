@@ -72,6 +72,11 @@ func main() {
 		api.DeleteChirp(w, r, &apiConfig)
 	})
 
+	// Webhooks
+	mux.HandleFunc("POST /api/polka/webhooks", func(w http.ResponseWriter, r *http.Request) {
+		api.PolkaWebhook(w, r, &apiConfig)
+	})
+
 	// auth
 	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
 		api.Login(w, r, &apiConfig)

@@ -21,6 +21,7 @@ func Login(w http.ResponseWriter, r *http.Request, a *types.ApiConfig) {
 		CreatedAt    string `json:"created_at"`
 		UpdatedAt    string `json:"updated_at"`
 		Email        string `json:"email"`
+		ChirpyRed    bool   `json:"is_chirpy_red"`
 		Token        string `json:"token"`
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -66,6 +67,7 @@ func Login(w http.ResponseWriter, r *http.Request, a *types.ApiConfig) {
 		CreatedAt:    user.CreatedAt.String(),
 		UpdatedAt:    user.UpdatedAt.String(),
 		Email:        user.Email,
+		ChirpyRed:    user.IsChirpyRed,
 		Token:        token,
 		RefreshToken: refreshToken,
 	}

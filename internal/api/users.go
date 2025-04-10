@@ -20,6 +20,7 @@ type respBody struct {
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 	Email     string `json:"email"`
+	ChirpyRed bool   `json:"is_chirpy_red"`
 }
 
 func CreateUser(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
@@ -53,6 +54,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request, config *types.ApiConfig)
 		CreatedAt: user.CreatedAt.String(),
 		UpdatedAt: user.UpdatedAt.String(),
 		Email:     user.Email,
+		ChirpyRed: user.IsChirpyRed,
 	}
 
 	data, err := json.Marshal(resp)
@@ -123,6 +125,7 @@ func UpdateUser(w http.ResponseWriter, r *http.Request, config *types.ApiConfig)
 		CreatedAt: user.CreatedAt.String(),
 		UpdatedAt: user.UpdatedAt.String(),
 		Email:     user.Email,
+		ChirpyRed: user.IsChirpyRed,
 	}
 
 	data, err := json.Marshal(resp)
