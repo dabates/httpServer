@@ -25,6 +25,43 @@ func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) 
 	id := r.PathValue("id")
 	fmt.Println("ID:", id)
 
+	author_id := r.URL.Query().Get("author_id")
+	if len(author_id) > 0 {
+		userId, err := uuid.Parse(author_id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		chirps, err := config.Db.GetChirpsByUser(context.Background(), userId)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		resp := make([]chirpsBody, len(chirps))
+		for i, chirp := range chirps {
+			resp[i] = chirpsBody{
+				Id:        chirp.ID.String(),
+				Body:      chirp.Body,
+				UserId:    chirp.UserID.String(),
+				CreatedAt: chirp.CreatedAt.String(),
+				UpdatedAt: chirp.UpdatedAt.String(),
+			}
+		}
+
+		data, err := json.Marshal(resp)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		w.Write(data)
+		return
+	}
+
 	if id != "" {
 		id, err := uuid.Parse(id)
 		if err != nil {
