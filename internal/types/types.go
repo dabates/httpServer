@@ -14,6 +14,7 @@ type ApiConfig struct {
 	Platform       string
 	Db             *database.Queries
 	Secret         string
+	PolkaApiKey    string
 }
 
 func (c *ApiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {

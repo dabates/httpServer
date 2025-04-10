@@ -106,3 +106,18 @@ func ValidateRefreshToken(token string, db *database.Queries) (bool, error) {
 
 	return true, nil
 }
+
+func GetApiKey(headers http.Header) (string, error) {
+	auth := headers.Get("Authorization")
+	if auth == "" {
+		return "", fmt.Errorf("authorization header is missing or empty")
+	}
+
+	if strings.Contains(strings.ToLower(auth), "apikey") == false {
+		return "", fmt.Errorf("authorization header is missing the 'ApiKey' prefix")
+	}
+
+	auth = strings.TrimSpace(strings.Replace(auth, "ApiKey ", "", 1))
+
+	return auth, nil
+}

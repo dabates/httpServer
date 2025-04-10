@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/dabates/httpServer/internal/auth"
 	"github.com/dabates/httpServer/internal/types"
 	"github.com/google/uuid"
 	"log"
@@ -17,8 +18,21 @@ type polkaRequest struct {
 }
 
 func PolkaWebhook(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
+	apiKey, err := auth.GetApiKey(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if apiKey != config.PolkaApiKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("Invalid API key"))
+		return
+	}
+
 	polkaData := polkaRequest{}
-	err := json.NewDecoder(r.Body).Decode(&polkaData)
+	err = json.NewDecoder(r.Body).Decode(&polkaData)
 	if err != nil {
 		log.Fatal(err)
 	}

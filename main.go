@@ -28,6 +28,9 @@ func main() {
 	secret := os.Getenv("SECRET")
 	apiConfig.Secret = secret
 
+	apiKey := os.Getenv("POLKA_KEY")
+	apiConfig.PolkaApiKey = apiKey
+
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
