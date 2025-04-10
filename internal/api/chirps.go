@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -24,6 +25,13 @@ type chirpsBody struct {
 func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) {
 	id := r.PathValue("id")
 	fmt.Println("ID:", id)
+
+	sortDir := r.URL.Query().Get("sort")
+	if sortDir == "" {
+		sortDir = "asc"
+	}
+
+	fmt.Println("SORT DIR:", sortDir)
 
 	author_id := r.URL.Query().Get("author_id")
 	if len(author_id) > 0 {
@@ -40,6 +48,13 @@ func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) 
 			w.Write([]byte(err.Error()))
 			return
 		}
+
+		sort.Slice(chirps, func(i, j int) bool {
+			if sortDir == "asc" {
+				return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+			}
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		})
 
 		w.WriteHeader(http.StatusOK)
 		resp := make([]chirpsBody, len(chirps))
@@ -97,6 +112,14 @@ func GetChirps(w http.ResponseWriter, r *http.Request, config *types.ApiConfig) 
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	sort.Slice(chirps, func(i, j int) bool {
+		if sortDir == "asc" {
+			return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+		}
+		return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+	})
+
 	resp := make([]chirpsBody, len(chirps))
 	for i, chirp := range chirps {
 		resp[i] = chirpsBody{
